@@ -1,11 +1,18 @@
-.PHONY: all
-all: task stdinExample
+here : 
+SHARED_LIBRARIES= libCodec.so
 
-task:	codec.h basic_main.c
+.PHONY: all
+all: task stdinExample coder
+
+task: codec.h basic_main.c
 	gcc basic_main.c ./libCodec.so -o encoder
 
-stdinExample:	stdin_main.c
-		gcc stdin_main.c ./libCodec.so -o tester
+stdinExample: stdin_main.c
+	gcc stdin_main.c ./libCodec.so -o tester
+
+coder: codec.h coder.o
+	g++ coder.o ./libCodec.so -o coder
+
 
 .PHONY: clean
 clean:
