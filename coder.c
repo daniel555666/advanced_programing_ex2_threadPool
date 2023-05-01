@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <stddef.h>
+#include <strings.h>
 
 #define dest_size 1024
 
@@ -149,19 +150,22 @@ int main(int argc, char *argv[])
     }
 
     //for debugging only
-    // FILE *fp;
-    // fp = freopen("text.txt", "r", stdin); // Open "input.txt" and redirect it as stdin
-    // if (fp == NULL) {
-    //     printf("Error opening file\n");
-    //     return 1;
-    // }
+    FILE *fp;
+    fp = freopen("text.txt", "r", stdin); // Open "input.txt" and redirect it as stdin
+    if (fp == NULL) {
+        printf("Error opening file\n");
+        return 1;
+    }
     //end for debugging only
 
     void (*func)(char *, int);
     char c;
     int counter = 0;
     int order = 1;
-    char data[dest_size];
+    // char data[dest_size];
+    char * data;
+    data = (char *) malloc (dest_size * sizeof(char));
+    bzero(data, dest_size);
     numberOfThreads = 2; // לבנתיים sysconf(_SC_NPROCESSORS_CONF);
     pthread_t *thread_ids = malloc(numberOfThreads * sizeof(pthread_t));
 
@@ -224,15 +228,8 @@ int main(int argc, char *argv[])
 
             Input *input = malloc(sizeof(struct Input));
             initInput(input, order, data, func);
-            // if(firstInput==NULL){
-            //     firstInput=input;
-            //     lastInput=firstInput;
-            // }
-            // else{
-            //     lastInput->next=input;
-            //     lastInput=lastInput->next;
-            // }
             insert(&input_list, input, &task_lock);
+
             order++;
 
             pthread_mutex_unlock(&lock);
@@ -261,16 +258,8 @@ int main(int argc, char *argv[])
 
         pthread_mutex_lock(&lock);
 
-        // if(firstInput==NULL){
-        //     firstInput=input;
-        //     lastInput=firstInput;
-        // }
-        // else{
-        //     lastInput->next=input;
-        //     lastInput=lastInput->next;
-        //     }
-
         insert(&input_list, input, &task_lock);
+        bzero(data, dest_size);
         order++;
         is_finished = 1;
         pthread_mutex_unlock(&lock);
@@ -282,6 +271,7 @@ int main(int argc, char *argv[])
         {
             printf("%s", first->data);
             freeFirst(&output_list, &output_lock);
+            output_order++;
         }
     }
     //need to put here wait
@@ -298,6 +288,7 @@ int main(int argc, char *argv[])
         {
             printf("%s", first->data);
             freeFirst(&output_list, &output_lock);
+            output_order++;
         }
     }
     printf("\n");
