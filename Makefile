@@ -5,13 +5,13 @@ SHARED_LIBRARIES= libCodec.so
 all: task stdinExample coder
 
 task: codec.h basic_main.c
-	gcc basic_main.c ./libCodec.so -o encoder
+	gcc -g basic_main.c ./libCodec.so -o encoder
 
 stdinExample: stdin_main.c
-	gcc stdin_main.c ./libCodec.so -o tester
+	gcc -g stdin_main.c ./libCodec.so -o tester
 
 coder: codec.h coder.c
-	gcc coder.c ./libCodec.so -o coder -pthread
+	gcc -g coder.c ./libCodec.so -o coder -pthread
 
 
 .PHONY: clean
