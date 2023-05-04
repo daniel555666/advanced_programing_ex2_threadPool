@@ -134,7 +134,11 @@ pthread_mutex_t lock;
 Input *input_list=NULL;
 Input *output_list=NULL;
 pthread_mutex_t task_lock;
+pthread_mutex_t task_lock2;
 pthread_mutex_t output_lock;
+pthread_mutex_t output_lock2;
+pthread_cond_t task_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t output_cond = PTHREAD_COND_INITIALIZER;
 int output_order = 1;
 int is_finished = 0;
 int first_input = 0;
@@ -150,32 +154,28 @@ int main(int argc, char *argv[])
     }
 
     //for debugging only
-    FILE *fp;
-    fp = freopen("text.txt", "r", stdin); // Open "input.txt" and redirect it as stdin
-    if (fp == NULL) {
-        printf("Error opening file\n");
-        return 1;
-    }
+    // FILE *fp;
+    // fp = freopen("long_text.txt", "r", stdin); // Open "input.txt" and redirect it as stdin
+    // if (fp == NULL) {
+    //     printf("Error opening file\n");
+    //     return 1;
+    // }
     //end for debugging only
 
     void (*func)(char *, int);
     char c;
     int counter = 0;
     int order = 1;
-    // char data[dest_size];
     char * data;
     data = (char *) malloc (dest_size * sizeof(char));
     bzero(data, dest_size);
-    numberOfThreads = 2; // לבנתיים sysconf(_SC_NPROCESSORS_CONF);
+    numberOfThreads = 3; // לבנתיים sysconf(_SC_NPROCESSORS_CONF);
     pthread_t *thread_ids = malloc(numberOfThreads * sizeof(pthread_t));
 
     //save key
-    // system("text.txt < cat");
-    // if(getchar() == 'c'){
-    //     printf(getchar());
-    // }
+
     key = atoi(argv[1]);
-    printf("key is %i \n", key);
+    // printf("key is %i \n", key);
 
     // check if enc or dec
     if (!strcmp(argv[2], "-e"))
@@ -197,13 +197,25 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    if (pthread_mutex_init(&task_lock, NULL) != 0)
+    if (pthread_mutex_init(&task_lock2, NULL) != 0)
+    {
+        printf("Mutex initialization failed.\n");
+        exit(EXIT_FAILURE);
+    }
+
+     if (pthread_mutex_init(&task_lock2, NULL) != 0)
     {
         printf("Mutex initialization failed.\n");
         exit(EXIT_FAILURE);
     }
 
     if (pthread_mutex_init(&output_lock, NULL) != 0)
+    {
+        printf("Mutex initialization failed.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pthread_mutex_init(&output_lock2, NULL) != 0)
     {
         printf("Mutex initialization failed.\n");
         exit(EXIT_FAILURE);
@@ -230,18 +242,22 @@ int main(int argc, char *argv[])
             initInput(input, order, data, func);
             insert(&input_list, input, &task_lock);
 
+            // if there are waiting threads, signal them that there is a new task.
+
+            pthread_cond_signal(&task_cond);
+
             order++;
 
             pthread_mutex_unlock(&lock);
 
-            Input *first = getFirst(output_list, &output_lock);
+            Input *first = getFirst(&output_list, &output_lock);
             if (first != NULL && first->order == output_order)
             {
                 printf("%s", first->data);
                 freeFirst(&output_list, &output_lock);
+                output_order++;
             }
 
-            printf("encripted data- in the main while: %s\n", data);
             counter = 0;
         }
     }
@@ -253,12 +269,15 @@ int main(int argc, char *argv[])
         input->func = func;
         input->order = order;
         strncpy(input->data, data, counter);
-        // initInput(input, order, data, func);
-        // printf("last data:\n %s\n", input->data);
 
         pthread_mutex_lock(&lock);
 
         insert(&input_list, input, &task_lock);
+
+        // if there are waiting threads, signal them that there is a new task.
+
+        pthread_cond_signal(&task_cond);
+
         bzero(data, dest_size);
         order++;
         is_finished = 1;
@@ -274,16 +293,36 @@ int main(int argc, char *argv[])
             output_order++;
         }
     }
-    //need to put here wait
-    for (int i = 0; i < numberOfThreads; i++)
-    {
-        pthread_join(thread_ids[i], NULL);
-    }
+
+    // make sure to awake all of the threads, since now they can take the rest of the tasks,
+    // and they can stop only if there is no task for them
+
+    pthread_cond_signal(&task_cond);
 
     // Print the rest of the data
-    while (getFirst(&output_list, &output_lock) != NULL)
+
+    // if the output queue is empty, wait till the threads will add something to it and wake you.
+
+    if (getFirst(&output_list, &output_lock) == NULL){
+        pthread_cond_wait(&output_cond, &output_lock2);
+    }
+
+    while (output_order < order)
     {
         Input *first = getFirst(&output_list, &output_lock);
+        Input *inp = getFirst(&input_list, &task_lock);
+
+        // if the first output is null but the task queue is not empty, wait until the threads will
+        //signal you.
+
+        if(first == NULL && inp != NULL){
+            pthread_cond_wait(&output_cond, &output_lock2);
+            continue;
+        }
+
+        // if the first output is null and the task queue is empty, then end the loop since all the threads
+        // are finished
+
         if (first->order == output_order)
         {
             printf("%s", first->data);
@@ -306,10 +345,19 @@ void *tempFunc()
         }
         while (task == NULL)
         {
-            if(is_finished != 0){
+
+            task = popFirst(&input_list, &task_lock);
+            if(task == NULL && is_finished == 1){
                 return;
             }
-            task = popFirst(&input_list, &task_lock);
+
+            // if the task queue is empty, wait until the main thread will add a new task
+
+            if(task == NULL){
+                // printf("Thread %s is waiting\n", pthread_self);
+                pthread_cond_wait(&task_cond, &task_lock2);
+                // printf("Thread %s is now awake\n", pthread_self);
+            }
         }
         // We do not need to wait since we use mutex to allow the thread to wait until they get the input;
         // while(task==NULL){
@@ -319,8 +367,10 @@ void *tempFunc()
         // activate the encrypt or decrypt function
         (task->func)(task->data, key);
         // insert the task into the output list
+        task->next = NULL;
         insert(&output_list, task, &output_lock);
-
+        pthread_cond_signal(&task_cond);
+        pthread_cond_signal(&output_cond);
         // printf("the first data:%s\n",firstInput->data);
         // כאן מפעילים כל טרד והוא בודק מהתור משימות אם יש משימה אם לא לא עושה כלום, בטח יש משהו שמעיר אותם.
         //הם מוציאים משימות ומעורב מיוטיקס, וצריך לשמור את הסר איך שהוא
