@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
     char * data;
     data = (char *) malloc (dest_size * sizeof(char));
     bzero(data, dest_size);
-    numberOfThreads = 3; // לבנתיים sysconf(_SC_NPROCESSORS_CONF);
+    numberOfThreads = sysconf(_SC_NPROCESSORS_CONF);
     pthread_t *thread_ids = malloc(numberOfThreads * sizeof(pthread_t));
 
     //save key
@@ -197,7 +197,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    if (pthread_mutex_init(&task_lock2, NULL) != 0)
+    if (pthread_mutex_init(&task_lock, NULL) != 0)
     {
         printf("Mutex initialization failed.\n");
         exit(EXIT_FAILURE);
@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < numberOfThreads; i++)
     {
         pthread_create(&thread_ids[i], NULL, tempFunc, NULL);
-        printf("create thread number %d\n", i);
+       printf("create thread number %d\n", i);
     }
 
     while ((c = getchar()) != EOF)
@@ -310,12 +310,12 @@ int main(int argc, char *argv[])
     while (output_order < order)
     {
         Input *first = getFirst(&output_list, &output_lock);
-        Input *inp = getFirst(&input_list, &task_lock);
+        //Input *inp = getFirst(&input_list, &task_lock);
 
         // if the first output is null but the task queue is not empty, wait until the threads will
         //signal you.
 
-        if(first == NULL && inp != NULL){
+        if(first == NULL ){
             pthread_cond_wait(&output_cond, &output_lock2);
             continue;
         }
