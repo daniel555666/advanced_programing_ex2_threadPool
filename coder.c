@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < numberOfThreads; i++)
     {
         pthread_create(&thread_ids[i], NULL, tempFunc, NULL);
-       printf("create thread number %d\n", i);
+       //printf("create thread number %d\n", i);
     }
 
     while ((c = getchar()) != EOF)
